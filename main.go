@@ -9,9 +9,8 @@ import (
 )
 
 type Task struct {
-	ID     int
-	Name   string
-	Status string
+	ID   int
+	Name string
 }
 
 var tasks []Task
@@ -20,138 +19,130 @@ var nextID = 1
 func main() {
 	loadTasks()
 	
-	fmt.Println("Simple Task Manager")
-	fmt.Println("Commands: add, list, remove, quit")
-	
-	scanner := bufio.NewScanner(os.Stdin)
-	
-	for {
-		fmt.Print("> ")
-		if !scanner.Scan() {
-			break
-		}
-		
-		input := strings.TrimSpace(scanner.Text())
-		parts := strings.Fields(input)
-		
-		if len(parts) == 0 {
-			continue
-		}
-		
-		command := strings.ToLower(parts[0])
-		
-		switch command {
-		case "add":
-			if len(parts) > 1 {
-				taskName := strings.Join(parts[1:], " ")
-				addTask(taskName)
-			} else {
-				fmt.Println("Usage: add <task description>")
-			}
-			
-		case "list":
-			listTasks()
-			
-		case "remove":
-			if len(parts) > 1 {
-				id, err := strconv.Atoi(parts[1])
-				if err != nil {
-					fmt.Println("Invalid ID. Please provide a number.")
-				} else {
-					removeTask(id)
-				}
-			} else {
-				fmt.Println("Usage: remove <task_id>")
-			}
-			
-		case "quit", "exit":
-			saveTasks()
-			fmt.Println("Goodbye!")
-			return
-			
-		default:
-			fmt.Println("Unknown command. Available commands: add, list, remove, quit")
-		}
+	if len(os.Args) < 2 {
+		printUsage()
+		return
 	}
+
+	command := os.Args[1]
+
+	switch command {
+	case "add":
+		if len(os.Args) < 3 {
+			fmt.Println("Error: Please provide a task description")
+			return
+		}
+		taskName := strings.Join(os.Args[2:], " ")
+		addTask(taskName)
+	case "remove":
+		if len(os.Args) < 3 {
+			fmt.Println("Error: Please provide a task ID to remove")
+			return
+		}
+		id, err := strconv.Atoi(os.Args[2])
+		if err != nil {
+			fmt.Println("Error: Invalid task ID")
+			return
+		}
+		removeTask(id)
+	case "list":
+		listTasks()
+	case "help":
+		printUsage()
+	default:
+		fmt.Printf("Unknown command: %s\n", command)
+		printUsage()
+	}
+
+	saveTasks()
 }
 
 func addTask(name string) {
 	task := Task{
-		ID:     nextID,
-		Name:   name,
-		Status: "Pending",
+		ID:   nextID,
+		Name: name,
 	}
 	tasks = append(tasks, task)
 	nextID++
-	fmt.Printf("Task added successfully (ID: %d)\n", task.ID)
-}
-
-func listTasks() {
-	if len(tasks) == 0 {
-		fmt.Println("No tasks found.")
-		return
-	}
-	
-	fmt.Println("\nTasks:")
-	fmt.Println("ID\tStatus\t\tDescription")
-	fmt.Println("--\t------\t\t-----------")
-	for _, task := range tasks {
-		fmt.Printf("%d\t%-10s\t%s\n", task.ID, task.Status, task.Name)
-	}
-	fmt.Println()
+	fmt.Printf("Added task: [%d] %s\n", task.ID, task.Name)
 }
 
 func removeTask(id int) {
 	for i, task := range tasks {
 		if task.ID == id {
 			tasks = append(tasks[:i], tasks[i+1:]...)
-			fmt.Printf("Task %d removed successfully\n", id)
+			fmt.Printf("Removed task: [%d] %s\n", task.ID, task.Name)
 			return
 		}
 	}
 	fmt.Printf("Task with ID %d not found\n", id)
 }
 
+func listTasks() {
+	if len(tasks) == 0 {
+		fmt.Println("No tasks found")
+		return
+	}
+
+	fmt.Println("Tasks:")
+	for _, task := range tasks {
+		fmt.Printf("[%d] %s\n", task.ID, task.Name)
+	}
+}
+
+func printUsage() {
+	fmt.Println("Task Manager - Command Line Tool")
+	fmt.Println("Usage:")
+	fmt.Println("  task add <task description>    - Add a new task")
+	fmt.Println("  task remove <task ID>          - Remove a task by ID")
+	fmt.Println("  task list                      - List all tasks")
+	fmt.Println("  task help                      - Show this help message")
+}
+
 func saveTasks() {
-	// Simple file-based persistence
 	file, err := os.Create("tasks.txt")
 	if err != nil {
-		fmt.Println("Warning: Could not save tasks to file")
+		fmt.Printf("Error saving tasks: %v\n", err)
 		return
 	}
 	defer file.Close()
-	
+
+	writer := bufio.NewWriter(file)
 	for _, task := range tasks {
-		line := fmt.Sprintf("%d|%s|%s\n", task.ID, task.Name, task.Status)
-		file.WriteString(line)
+		_, err := writer.WriteString(fmt.Sprintf("%d|%s\n", task.ID, task.Name))
+		if err != nil {
+			fmt.Printf("Error writing task: %v\n", err)
+			return
+		}
 	}
+	writer.Flush()
 }
 
 func loadTasks() {
 	file, err := os.Open("tasks.txt")
 	if err != nil {
-		// File doesn't exist, start fresh
+		if os.IsNotExist(err) {
+			return // File doesn't exist yet, that's OK
+		}
+		fmt.Printf("Error loading tasks: %v\n", err)
 		return
 	}
 	defer file.Close()
-	
+
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
 		parts := strings.Split(line, "|")
-		if len(parts) >= 3 {
+		if len(parts) == 2 {
 			id, err := strconv.Atoi(parts[0])
 			if err != nil {
 				continue
 			}
-			
 			task := Task{
-				ID:     id,
-				Name:   parts[1],
-				Status: parts[2],
+				ID:   id,
+				Name: parts[1],
 			}
 			tasks = append(tasks, task)
-			
 			if id >= nextID {
 				nextID = id + 1
 			}
